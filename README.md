@@ -55,6 +55,90 @@ sudo cargo run --features development -- --chain-node-grpc <endpoint> --chain-pr
 
 ## API Docs
 
+### /transactions
+
+Provides all blocks that contain any transactions on the provided chain and the data of the transactions.
+
+- URL: `http://localhost:9000/transactions`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```json
+{
+  "block_number": 1850,
+  "transactions": [
+    {
+      "tx_hash": "6BEB689E0589C01663A460B20363712B8049A12AE1094CDFE543C5973A8F26C4",
+      "data": {
+        "amount": [
+          {
+            "amount": "4000000",
+            "denom": "umfx"
+          }
+        ],
+        "from_address": "manifest1wxjfftrc0emj5f7ldcvtpj05lxtz3t2npghwsf",
+        "to_address": "manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj"
+      }
+    }
+  ],
+  "formatted_date": "04-10-2024"
+}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://localhost:9000/transactions`
+
+---
+
+### /transactions/{address}
+
+Provides all blocks that contain any transactions for the specified address on the provided chain and the data of those transactions.
+
+- URL: `http://localhost:9000/transactions/{address}`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```json
+{
+  "block_number": 1850,
+  "transactions": [
+    {
+      "tx_hash": "6BEB689E0589C01663A460B20363712B8049A12AE1094CDFE543C5973A8F26C4",
+      "data": {
+        "amount": [
+          {
+            "amount": "4000000",
+            "denom": "umfx"
+          }
+        ],
+        "from_address": "manifest1wxjfftrc0emj5f7ldcvtpj05lxtz3t2npghwsf",
+        "to_address": "manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj"
+      }
+    }
+  ],
+  "formatted_date": "04-10-2024"
+}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://localhost:9000/transactions/manifest1uwqjtgjhjctjc45ugy7ev5prprhehc7wclherd`
+
+---
+
 ### /transactions/send
 
 Provides all blocks that contain MsgSend transactions on the provided chain and the data of the transactions.
@@ -93,7 +177,7 @@ Provides all blocks that contain MsgSend transactions on the provided chain and 
 
 - Sample Call:
 
-`curl http://localhost:9000/send`
+`curl http://localhost:9000/transactions/send`
 
 ---
 
@@ -135,7 +219,7 @@ Provides all blocks that contain MsgSend transactions on the provided chain and 
 
 - Sample Call:
 
-`curl http://localhost:9000/send/{address}`
+`curl http://localhost:9000/transactions/send/manifest1uwqjtgjhjctjc45ugy7ev5prprhehc7wclherd`
 
 ---
 
@@ -177,7 +261,7 @@ Provides all blocks that contain MsgSend transactions on the provided chain and 
 
 - Sample Call:
 
-`curl http://localhost:9000/send/{address}/send`
+`curl http://localhost:9000/transactions/send/manifest1uwqjtgjhjctjc45ugy7ev5prprhehc7wclherd/send`
 
 ---
 
@@ -219,6 +303,6 @@ Provides all blocks that contain MsgSend transactions on the provided chain and 
 
 - Sample Call:
 
-`curl http://localhost:9000/send/{address}/receive`
+`curl http://localhost:9000/transactions/send/manifest1uwqjtgjhjctjc45ugy7ev5prprhehc7wclherd/receive`
 
 ---
