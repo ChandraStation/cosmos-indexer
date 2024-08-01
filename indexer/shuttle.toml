@@ -1,0 +1,8 @@
+[shuttle]
+environment = "production"
+
+[environment.production]
+CHAIN_NODE_GRPC = "http://66.172.36.142:2119"
+CHAIN_PREFIX = "manifest"
+TEST_MODE = "false"
+TEST_BLOCK_LIMIT = "100000"
