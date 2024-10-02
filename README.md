@@ -55,6 +55,13 @@ sudo cargo run --features development -- --chain-node-grpc <endpoint> --chain-pr
 
 ## API Docs
 
+Every API endpoint support the following URL parameters:
+
+- page: The page number of the results.
+- page_size: The number of results per page.
+
+E.g. `curl 'http://localhost:9000/transactions?page=3&page_size=10'`
+
 ### /transactions
 
 Provides all blocks that contain any transactions on the provided chain and the data of the transactions.
