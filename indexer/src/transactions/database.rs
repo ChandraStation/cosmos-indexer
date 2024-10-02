@@ -11,6 +11,7 @@ use futures::future::join_all;
 use lazy_static::lazy_static;
 use log::{error, info};
 use rocksdb::DB;
+use serde::Serialize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{
@@ -231,7 +232,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                                 .seconds;
                             let key =
                                 format!("{:012}:msgSend:{}:{}", block_number, timestamp, tx_hash);
-                            save_msg_send(db, &key, &custom_msg_send);
+                            save_msg(db, &key, &custom_msg_send);
                             send_msg_counter += 1;
                         }
                     } else if message.type_url == "/ibc.applications.transfer.v1.MsgTransfer" {
@@ -259,7 +260,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                                 "{:012}:msgIbcTransfer:{}:{}",
                                 block_number, timestamp, tx_hash
                             );
-                            save_msg_ibc_transfer(db, &key, &custom_ibc_transfer);
+                            save_msg(db, &key, &custom_ibc_transfer);
                         }
                     }
                 }
@@ -351,7 +352,7 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
                     let msg_send: MsgSend = decode_any(message).unwrap();
                     let custom_msg_send = CustomMsgSend::from(&msg_send);
                     let key = format!("{:012}:msgSend:{}:{}", block_number, timestamp, tx_hash);
-                    save_msg_send(db, &key, &custom_msg_send);
+                    save_msg(db, &key, &custom_msg_send);
                 }
                 "/ibc.applications.transfer.v1.MsgTransfer" => {
                     let msg_ibc_transfer: MsgTransfer = decode_any(message).unwrap();
@@ -360,7 +361,7 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
                         "{:012}:msgIbcTransfer:{}:{}",
                         block_number, timestamp, tx_hash
                     );
-                    save_msg_ibc_transfer(db, &key, &custom_ibc_transfer);
+                    save_msg(db, &key, &custom_ibc_transfer);
                 }
                 _ => {}
             }
@@ -566,26 +567,9 @@ pub async fn transactions(
     Ok(())
 }
 
-//saves serialized transactions to database
-pub fn save_msg_send(db: &DB, key: &str, data: &CustomMsgSend) {
+pub fn save_msg<T: Serialize>(db: &DB, key: &str, data: &T) {
     let data_json = serde_json::to_string(data).unwrap();
     db.put(key.as_bytes(), data_json.as_bytes()).unwrap();
-}
-
-pub fn save_msg_ibc_transfer(db: &DB, key: &str, data: &CustomMsgTransfer) {
-    let data_json = serde_json::to_string(data).unwrap();
-    db.put(key.as_bytes(), data_json.as_bytes()).unwrap();
-}
-
-// Load & deseralize transactions
-pub fn load_msg_send(db: &DB, key: &str) -> Option<CustomMsgSend> {
-    let res = db.get(key.as_bytes()).unwrap();
-    res.map(|bytes| serde_json::from_slice::<CustomMsgSend>(&bytes).unwrap())
-}
-
-pub fn load_msg_ibc_transfer(db: &DB, key: &str) -> Option<CustomMsgTransfer> {
-    let res = db.get(key.as_bytes()).unwrap();
-    res.map(|bytes| serde_json::from_slice::<CustomMsgTransfer>(&bytes).unwrap())
 }
 
 // timestamp function using downloaded blocks as a source of truth
