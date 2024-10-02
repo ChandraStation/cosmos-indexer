@@ -11,6 +11,9 @@ use rocksdb::DB;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use serde_derive::Deserialize;
+
+const DEFAULT_PAGE_SIZE: usize = 10;
 
 #[derive(Serialize)]
 struct BlockTransactions {
@@ -36,24 +39,33 @@ struct AllTransactionResponse {
     data: serde_json::Value,
 }
 
+#[derive(Deserialize)]
+pub struct PaginationParams {
+    page: Option<usize>,
+    page_size: Option<usize>,
+}
+
 type BlockData = (String, Vec<ApiResponse>);
 
-pub async fn get_all_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
-    let transactions = get_all_filtered_transactions(&db, None);
+pub async fn get_all_transactions(db: web::Data<Arc<DB>>,  web::Query(pagination): web::Query<PaginationParams>,) -> impl Responder {
+    let transactions = get_all_filtered_transactions(&db, None, pagination.page, pagination.page_size);
     HttpResponse::Ok().json(transactions)
 }
 
 pub async fn get_all_transactions_by_address(
     db: web::Data<Arc<DB>>,
     address: String,
+    web::Query(pagination): web::Query<PaginationParams>,
 ) -> impl Responder {
-    let transactions = get_all_filtered_transactions(&db, Some(&address));
+    let transactions = get_all_filtered_transactions(&db, Some(&address), pagination.page, pagination.page_size);
     HttpResponse::Ok().json(transactions)
 }
 
 fn get_all_filtered_transactions(
     db: &Arc<DB>,
     address: Option<&str>,
+    page: Option<usize>,
+    page_size: Option<usize>,
 ) -> Vec<AllTransactionResponse> {
     let mut response_data = Vec::new();
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
@@ -101,14 +113,20 @@ fn get_all_filtered_transactions(
     }
 
     response_data.sort_by(|a, b| b.block_number.cmp(&a.block_number));
-    response_data
+
+    let page = page.unwrap_or(1);
+    let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
+    let start = (page - 1) * page_size;
+
+    response_data.into_iter().skip(start).take(page_size).collect()
 }
 
 pub async fn get_msg_send_transactions_by_address(
     db: web::Data<Arc<DB>>,
     address: String,
+    web::Query(pagination): web::Query<PaginationParams>,
 ) -> impl Responder {
-    let transactions = get_filtered_transactions(&db, &address, None);
+    let transactions = get_filtered_transactions(&db, &address, None, pagination.page, pagination.page_size);
     HttpResponse::Ok().json(transactions)
 }
 
@@ -116,6 +134,7 @@ pub async fn get_msg_send_transactions_by_address_and_direction(
     db: web::Data<Arc<DB>>,
     address: String,
     direction: String,
+    web::Query(pagination): web::Query<PaginationParams>,
 ) -> impl Responder {
     let direction = match direction.as_str() {
         "send" => Some(true),
@@ -123,7 +142,7 @@ pub async fn get_msg_send_transactions_by_address_and_direction(
         _ => return HttpResponse::BadRequest().body("Invalid direction. Use 'send' or 'receive'."),
     };
 
-    let transactions = get_filtered_transactions(&db, &address, direction);
+    let transactions = get_filtered_transactions(&db, &address, direction, pagination.page, pagination.page_size);
     HttpResponse::Ok().json(transactions)
 }
 
@@ -131,6 +150,8 @@ fn get_filtered_transactions(
     db: &Arc<DB>,
     address: &str,
     is_sender: Option<bool>,
+    page: Option<usize>,
+    page_size: Option<usize>,
 ) -> Vec<TransactionResponse> {
     let mut response_data = Vec::new();
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
@@ -165,7 +186,12 @@ fn get_filtered_transactions(
     }
 
     response_data.sort_by(|a, b| b.block_number.cmp(&a.block_number));
-    response_data
+
+    let page = page.unwrap_or(1);
+    let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
+    let start = (page - 1) * page_size;
+
+    response_data.into_iter().skip(start).take(page_size).collect()
 }
 
 fn format_date(timestamp: i64) -> String {
@@ -175,7 +201,7 @@ fn format_date(timestamp: i64) -> String {
     datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
-pub async fn get_all_msg_send_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
+pub async fn get_all_msg_send_transactions(db: web::Data<Arc<DB>>, web::Query(pagination): web::Query<PaginationParams>) -> impl Responder {
     let mut response_data = Vec::new();
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
 
@@ -210,10 +236,15 @@ pub async fn get_all_msg_send_transactions(db: web::Data<Arc<DB>>) -> impl Respo
     }
 
     response_data.sort_by(|a, b| b.block_number.cmp(&a.block_number));
-    HttpResponse::Ok().json(response_data)
+
+    let page = pagination.page.unwrap_or(1);
+    let page_size = pagination.page_size.unwrap_or(DEFAULT_PAGE_SIZE);
+    let start = (page - 1) * page_size;
+
+    HttpResponse::Ok().json(response_data.into_iter().skip(start).take(page_size).collect::<Vec<_>>())
 }
 
-pub async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
+pub async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>, web::Query(pagination): web::Query<PaginationParams>) -> impl Responder {
     let mut response_data: HashMap<u64, BlockData> = HashMap::new();
 
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
@@ -288,5 +319,9 @@ pub async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>) -> im
         )
         .collect();
 
-    HttpResponse::Ok().json(response_data)
+    let page = pagination.page.unwrap_or(1);
+    let page_size = pagination.page_size.unwrap_or(DEFAULT_PAGE_SIZE);
+    let start = (page - 1) * page_size;
+
+    HttpResponse::Ok().json(response_data.into_iter().skip(start).take(page_size).collect::<Vec<_>>())
 }
