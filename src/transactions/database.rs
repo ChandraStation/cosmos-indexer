@@ -1,10 +1,4 @@
 use actix_rt::System;
-use cosmos_sdk_proto_althea::{
-    cosmos::bank::v1beta1::MsgSend,
-    cosmos::tx::v1beta1::{TxBody, TxRaw},
-    ibc::{applications::transfer::v1::MsgTransfer, core::client::v1::Height},
-    tendermint::types::Block,
-};
 use deep_space::{client::Contact, utils::decode_any};
 use futures::future::join_all;
 
