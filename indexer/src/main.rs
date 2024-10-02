@@ -1,4 +1,5 @@
 extern crate lazy_static;
+use crate::transactions::endpoints::PaginationParams;
 
 pub mod transactions;
 pub mod types;
@@ -13,7 +14,7 @@ const DOMAIN: &str = if cfg!(test) || DEVELOPMENT {
 const PORT: u16 = 9000;
 
 use actix_cors::Cors;
-use actix_web::web::Path;
+use actix_web::web::{Path, Query};
 use actix_web::{
     error, get, middleware::Logger, middleware::NormalizePath, middleware::TrailingSlash, web, App,
     HttpResponse, HttpServer, Responder,
@@ -47,46 +48,49 @@ struct Args {
 }
 
 #[get("/transactions/send")]
-async fn get_all_msg_send_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
-    transactions::endpoints::get_all_msg_send_transactions(db).await
+async fn get_all_msg_send_transactions(db: web::Data<Arc<DB>>, pagination: Query<PaginationParams>) -> impl Responder {
+    transactions::endpoints::get_all_msg_send_transactions(db, pagination).await
 }
 
 #[get("/transactions/ibc_transfer")]
-async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
-    transactions::endpoints::get_all_msg_ibc_transfer_transactions(db).await
+async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>, pagination: Query<PaginationParams>) -> impl Responder {
+    transactions::endpoints::get_all_msg_ibc_transfer_transactions(db, pagination).await
 }
 
 #[get("/transactions/send/{address}")]
 async fn get_msg_send_transactions_by_address(
     db: web::Data<Arc<DB>>,
     address: Path<String>,
+    pagination: Query<PaginationParams>,
 ) -> impl Responder {
-    transactions::endpoints::get_msg_send_transactions_by_address(db, address.into_inner()).await
+    transactions::endpoints::get_msg_send_transactions_by_address(db, address.into_inner(), pagination).await
 }
 
 #[get("/transactions/send/{address}/{direction}")]
 async fn get_msg_send_transactions_by_address_and_direction(
     db: web::Data<Arc<DB>>,
     path: Path<(String, String)>,
+    pagination: Query<PaginationParams>,
 ) -> impl Responder {
     let (address, direction) = path.into_inner();
     transactions::endpoints::get_msg_send_transactions_by_address_and_direction(
-        db, address, direction,
+        db, address, direction, pagination,
     )
     .await
 }
 
 #[get("/transactions")]
-async fn get_all_transactions(db: web::Data<Arc<DB>>) -> impl Responder {
-    transactions::endpoints::get_all_transactions(db).await
+async fn get_all_transactions(db: web::Data<Arc<DB>>, pagination: Query<PaginationParams>,) -> impl Responder {
+    transactions::endpoints::get_all_transactions(db, pagination).await
 }
 
 #[get("/transactions/{address}")]
 async fn get_all_transactions_by_address(
     db: web::Data<Arc<DB>>,
     address: Path<String>,
+    pagination: Query<PaginationParams>,
 ) -> impl Responder {
-    transactions::endpoints::get_all_transactions_by_address(db, address.into_inner()).await
+    transactions::endpoints::get_all_transactions_by_address(db, address.into_inner(), pagination).await
 }
 
 #[actix_web::main]
