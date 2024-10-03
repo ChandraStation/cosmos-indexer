@@ -2,7 +2,7 @@ use crate::types::{ApiResponse, CustomMsgSend, CustomMsgTransfer};
 
 use actix_web::Responder;
 use actix_web::{web, HttpResponse};
-use chrono::{DateTime, Datelike, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, Local};
 
 use log::error;
 
@@ -164,9 +164,8 @@ fn get_filtered_transactions(
 }
 
 fn format_date(timestamp: i64) -> String {
-    let naive = chrono::NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap();
-    let datetime: chrono::DateTime<chrono::Utc> = chrono::DateTime::from_utc(naive, chrono::Utc);
-    let datetime_local: chrono::DateTime<chrono::Local> = datetime.into();
+    let datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
+    let datetime_local: DateTime<Local> = datetime.into();
     datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
@@ -226,20 +225,14 @@ pub async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>) -> im
                     let timestamp = key_parts[2].parse::<i64>().unwrap();
 
                     // Convert timestamp to Option<NaiveDateTime>
-                    let naive_opt = NaiveDateTime::from_timestamp_opt(timestamp, 0);
+                    let naive_opt = DateTime::from_timestamp(timestamp, 0);
 
-                    let mut _datetime_utc: Option<DateTime<Utc>> = None;
-
-                    if let Some(naive_datetime) = naive_opt {
-                        // Convert Option<NaiveDateTime> to DateTime
-                        _datetime_utc = Some(DateTime::<Utc>::from_utc(naive_datetime, Utc));
-                    } else {
+                    if naive_opt.is_none() {
                         error!("Invalid timestamp: {}", timestamp);
                         continue; // skip this iteration if timestamp is invalid
                     }
 
-                    let datetime_utc = _datetime_utc.unwrap(); // we can safely unwrap because of the `continue` above
-
+                    let datetime_utc = naive_opt.unwrap(); // we can safely unwrap because of the `continue` above
                     let datetime_local: DateTime<Local> = datetime_utc.into();
 
                     // Extract month, day, and year

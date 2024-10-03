@@ -2,8 +2,14 @@ use actix_rt::System;
 use deep_space::{client::Contact, utils::decode_any};
 use futures::future::join_all;
 
+use cosmos_sdk_proto_althea::cosmos::bank::v1beta1::MsgSend;
+use cosmos_sdk_proto_althea::cosmos::tx::v1beta1::{TxBody, TxRaw};
+use cosmos_sdk_proto_althea::ibc::applications::transfer::v1::MsgTransfer;
+use cosmos_sdk_proto_althea::ibc::core::client::v1::Height;
+use cosmos_sdk_proto_althea::tendermint::types::Block;
 use lazy_static::lazy_static;
 use log::{error, info};
+use prost_types::Any;
 use rocksdb::DB;
 use serde::Serialize;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -188,14 +194,14 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
 
             // tx fetching
             for tx in block.data.unwrap().txs {
-                let raw_tx_any = prost_types::Any {
+                let raw_tx_any = Any {
                     type_url: "/cosmos.tx.v1beta1.TxRaw".to_string(),
                     value: tx,
                 };
                 let tx_raw: TxRaw = decode_any(raw_tx_any.clone()).unwrap();
                 let value_ref: &[u8] = raw_tx_any.value.as_ref();
                 let tx_hash = sha256::digest(value_ref).to_uppercase();
-                let body_any = prost_types::Any {
+                let body_any = Any {
                     type_url: "/cosmos.tx.v1beta1.TxBody".to_string(),
                     value: tx_raw.body_bytes,
                 };
@@ -208,7 +214,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                     if message.type_url == "/cosmos.bank.v1beta1.MsgSend" {
                         msg_counter += 1;
 
-                        let msg_send_any = prost_types::Any {
+                        let msg_send_any = Any {
                             type_url: "/cosmos.bank.v1beta1.MsgSend".to_string(),
                             value: message.value,
                         };
@@ -233,7 +239,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                         has_msg_ibc_transfer = true;
                         msg_counter += 1;
 
-                        let msg_ibc_transfer_any = prost_types::Any {
+                        let msg_ibc_transfer_any = Any {
                             type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
                             value: message.value,
                         };
@@ -326,14 +332,14 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
         .seconds;
 
     for tx in block.data.as_ref().unwrap().txs.iter() {
-        let raw_tx_any = prost_types::Any {
+        let raw_tx_any = Any {
             type_url: "/cosmos.tx.v1beta1.TxRaw".to_string(),
             value: tx.clone(),
         };
         let tx_raw: TxRaw = decode_any(raw_tx_any.clone()).unwrap();
         let value_ref: &[u8] = raw_tx_any.value.as_ref();
         let tx_hash = sha256::digest(value_ref).to_uppercase();
-        let body_any = prost_types::Any {
+        let body_any = Any {
             type_url: "/cosmos.tx.v1beta1.TxBody".to_string(),
             value: tx_raw.body_bytes,
         };
