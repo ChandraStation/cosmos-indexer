@@ -1,16 +1,17 @@
 use actix_rt::System;
-use cosmos_sdk_proto_althea::{
-    cosmos::bank::v1beta1::MsgSend,
-    cosmos::tx::v1beta1::{TxBody, TxRaw},
-    ibc::{applications::transfer::v1::MsgTransfer, core::client::v1::Height},
-    tendermint::types::Block,
-};
 use deep_space::{client::Contact, utils::decode_any};
 use futures::future::join_all;
 
+use cosmos_sdk_proto_althea::cosmos::bank::v1beta1::MsgSend;
+use cosmos_sdk_proto_althea::cosmos::tx::v1beta1::{TxBody, TxRaw};
+use cosmos_sdk_proto_althea::ibc::applications::transfer::v1::MsgTransfer;
+use cosmos_sdk_proto_althea::ibc::core::client::v1::Height;
+use cosmos_sdk_proto_althea::tendermint::types::Block;
 use lazy_static::lazy_static;
 use log::{error, info};
+use prost_types::Any;
 use rocksdb::DB;
+use serde::Serialize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{
@@ -193,14 +194,14 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
 
             // tx fetching
             for tx in block.data.unwrap().txs {
-                let raw_tx_any = prost_types::Any {
+                let raw_tx_any = Any {
                     type_url: "/cosmos.tx.v1beta1.TxRaw".to_string(),
                     value: tx,
                 };
                 let tx_raw: TxRaw = decode_any(raw_tx_any.clone()).unwrap();
                 let value_ref: &[u8] = raw_tx_any.value.as_ref();
                 let tx_hash = sha256::digest(value_ref).to_uppercase();
-                let body_any = prost_types::Any {
+                let body_any = Any {
                     type_url: "/cosmos.tx.v1beta1.TxBody".to_string(),
                     value: tx_raw.body_bytes,
                 };
@@ -213,7 +214,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                     if message.type_url == "/cosmos.bank.v1beta1.MsgSend" {
                         msg_counter += 1;
 
-                        let msg_send_any = prost_types::Any {
+                        let msg_send_any = Any {
                             type_url: "/cosmos.bank.v1beta1.MsgSend".to_string(),
                             value: message.value,
                         };
@@ -231,14 +232,14 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                                 .seconds;
                             let key =
                                 format!("{:012}:msgSend:{}:{}", block_number, timestamp, tx_hash);
-                            save_msg_send(db, &key, &custom_msg_send);
+                            save_msg(db, &key, &custom_msg_send);
                             send_msg_counter += 1;
                         }
                     } else if message.type_url == "/ibc.applications.transfer.v1.MsgTransfer" {
                         has_msg_ibc_transfer = true;
                         msg_counter += 1;
 
-                        let msg_ibc_transfer_any = prost_types::Any {
+                        let msg_ibc_transfer_any = Any {
                             type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
                             value: message.value,
                         };
@@ -259,7 +260,7 @@ async fn search(contact: &Contact, start: u64, end: u64, db: &DB) {
                                 "{:012}:msgIbcTransfer:{}:{}",
                                 block_number, timestamp, tx_hash
                             );
-                            save_msg_ibc_transfer(db, &key, &custom_ibc_transfer);
+                            save_msg(db, &key, &custom_ibc_transfer);
                         }
                     }
                 }
@@ -331,14 +332,14 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
         .seconds;
 
     for tx in block.data.as_ref().unwrap().txs.iter() {
-        let raw_tx_any = prost_types::Any {
+        let raw_tx_any = Any {
             type_url: "/cosmos.tx.v1beta1.TxRaw".to_string(),
             value: tx.clone(),
         };
         let tx_raw: TxRaw = decode_any(raw_tx_any.clone()).unwrap();
         let value_ref: &[u8] = raw_tx_any.value.as_ref();
         let tx_hash = sha256::digest(value_ref).to_uppercase();
-        let body_any = prost_types::Any {
+        let body_any = Any {
             type_url: "/cosmos.tx.v1beta1.TxBody".to_string(),
             value: tx_raw.body_bytes,
         };
@@ -351,7 +352,7 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
                     let msg_send: MsgSend = decode_any(message).unwrap();
                     let custom_msg_send = CustomMsgSend::from(&msg_send);
                     let key = format!("{:012}:msgSend:{}:{}", block_number, timestamp, tx_hash);
-                    save_msg_send(db, &key, &custom_msg_send);
+                    save_msg(db, &key, &custom_msg_send);
                 }
                 "/ibc.applications.transfer.v1.MsgTransfer" => {
                     let msg_ibc_transfer: MsgTransfer = decode_any(message).unwrap();
@@ -360,7 +361,7 @@ async fn process_block(_contact: &Contact, block: &Block, db: &DB) {
                         "{:012}:msgIbcTransfer:{}:{}",
                         block_number, timestamp, tx_hash
                     );
-                    save_msg_ibc_transfer(db, &key, &custom_ibc_transfer);
+                    save_msg(db, &key, &custom_ibc_transfer);
                 }
                 _ => {}
             }
@@ -566,26 +567,9 @@ pub async fn transactions(
     Ok(())
 }
 
-//saves serialized transactions to database
-pub fn save_msg_send(db: &DB, key: &str, data: &CustomMsgSend) {
+pub fn save_msg<T: Serialize>(db: &DB, key: &str, data: &T) {
     let data_json = serde_json::to_string(data).unwrap();
     db.put(key.as_bytes(), data_json.as_bytes()).unwrap();
-}
-
-pub fn save_msg_ibc_transfer(db: &DB, key: &str, data: &CustomMsgTransfer) {
-    let data_json = serde_json::to_string(data).unwrap();
-    db.put(key.as_bytes(), data_json.as_bytes()).unwrap();
-}
-
-// Load & deseralize transactions
-pub fn load_msg_send(db: &DB, key: &str) -> Option<CustomMsgSend> {
-    let res = db.get(key.as_bytes()).unwrap();
-    res.map(|bytes| serde_json::from_slice::<CustomMsgSend>(&bytes).unwrap())
-}
-
-pub fn load_msg_ibc_transfer(db: &DB, key: &str) -> Option<CustomMsgTransfer> {
-    let res = db.get(key.as_bytes()).unwrap();
-    res.map(|bytes| serde_json::from_slice::<CustomMsgTransfer>(&bytes).unwrap())
 }
 
 // timestamp function using downloaded blocks as a source of truth

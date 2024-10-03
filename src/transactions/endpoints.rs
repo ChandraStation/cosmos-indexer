@@ -2,7 +2,7 @@ use crate::types::{ApiResponse, CustomMsgSend, CustomMsgTransfer};
 
 use actix_web::Responder;
 use actix_web::{web, HttpResponse};
-use chrono::{DateTime, Datelike, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, Local};
 
 use log::error;
 
@@ -58,44 +58,41 @@ fn get_all_filtered_transactions(
     let mut response_data = Vec::new();
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
 
-    for item in iterator {
-        if let Ok((key, value)) = item {
-            let key_str = String::from_utf8_lossy(&key);
-            let key_parts: Vec<&str> = key_str.split(':').collect();
-            if key_parts.len() == 4 {
-                let transaction_type = key_parts[1];
-                let block_number = key_parts[0].parse::<u64>().unwrap();
-                let timestamp = key_parts[2].parse::<i64>().unwrap();
-                let formatted_date = format_date(timestamp);
+    for (key, value) in iterator.flatten() {
+        let key_str = String::from_utf8_lossy(&key);
+        let key_parts: Vec<&str> = key_str.split(':').collect();
+        if key_parts.len() == 4 {
+            let transaction_type = key_parts[1];
+            let block_number = key_parts[0].parse::<u64>().unwrap();
+            let timestamp = key_parts[2].parse::<i64>().unwrap();
+            let formatted_date = format_date(timestamp);
 
-                let (data, is_relevant) = match transaction_type {
-                    "msgSend" => {
-                        let msg_send: CustomMsgSend = serde_json::from_slice(&value).unwrap();
-                        let is_relevant = address.map_or(true, |addr| {
-                            msg_send.from_address == addr || msg_send.to_address == addr
-                        });
-                        (serde_json::to_value(&msg_send).unwrap(), is_relevant)
-                    }
-                    "msgIbcTransfer" => {
-                        let msg_transfer: CustomMsgTransfer =
-                            serde_json::from_slice(&value).unwrap();
-                        let is_relevant = address.map_or(true, |addr| {
-                            msg_transfer.sender == addr || msg_transfer.receiver == addr
-                        });
-                        (serde_json::to_value(&msg_transfer).unwrap(), is_relevant)
-                    }
-                    _ => continue,
-                };
-
-                if is_relevant {
-                    response_data.push(AllTransactionResponse {
-                        tx_hash: key_parts[3].to_string(),
-                        block_number,
-                        formatted_date,
-                        transaction_type: transaction_type.to_string(),
-                        data,
+            let (data, is_relevant) = match transaction_type {
+                "msgSend" => {
+                    let msg_send: CustomMsgSend = serde_json::from_slice(&value).unwrap();
+                    let is_relevant = address.map_or(true, |addr| {
+                        msg_send.from_address == addr || msg_send.to_address == addr
                     });
+                    (serde_json::to_value(&msg_send).unwrap(), is_relevant)
                 }
+                "msgIbcTransfer" => {
+                    let msg_transfer: CustomMsgTransfer = serde_json::from_slice(&value).unwrap();
+                    let is_relevant = address.map_or(true, |addr| {
+                        msg_transfer.sender == addr || msg_transfer.receiver == addr
+                    });
+                    (serde_json::to_value(&msg_transfer).unwrap(), is_relevant)
+                }
+                _ => continue,
+            };
+
+            if is_relevant {
+                response_data.push(AllTransactionResponse {
+                    tx_hash: key_parts[3].to_string(),
+                    block_number,
+                    formatted_date,
+                    transaction_type: transaction_type.to_string(),
+                    data,
+                });
             }
         }
     }
@@ -135,31 +132,29 @@ fn get_filtered_transactions(
     let mut response_data = Vec::new();
     let iterator = db.iterator(rocksdb::IteratorMode::Start);
 
-    for item in iterator {
-        if let Ok((key, value)) = item {
-            let key_str = String::from_utf8_lossy(&key);
-            let key_parts: Vec<&str> = key_str.split(':').collect();
-            if key_parts.len() == 4 && key_parts[1] == "msgSend" {
-                let msg_send: CustomMsgSend = serde_json::from_slice(&value).unwrap();
+    for (key, value) in iterator.flatten() {
+        let key_str = String::from_utf8_lossy(&key);
+        let key_parts: Vec<&str> = key_str.split(':').collect();
+        if key_parts.len() == 4 && key_parts[1] == "msgSend" {
+            let msg_send: CustomMsgSend = serde_json::from_slice(&value).unwrap();
 
-                let is_sender_match = match is_sender {
-                    Some(true) => msg_send.from_address == address,
-                    Some(false) => msg_send.to_address == address,
-                    None => msg_send.from_address == address || msg_send.to_address == address,
-                };
+            let is_sender_match = match is_sender {
+                Some(true) => msg_send.from_address == address,
+                Some(false) => msg_send.to_address == address,
+                None => msg_send.from_address == address || msg_send.to_address == address,
+            };
 
-                if is_sender_match {
-                    let block_number = key_parts[0].parse::<u64>().unwrap();
-                    let timestamp = key_parts[2].parse::<i64>().unwrap();
-                    let formatted_date = format_date(timestamp);
+            if is_sender_match {
+                let block_number = key_parts[0].parse::<u64>().unwrap();
+                let timestamp = key_parts[2].parse::<i64>().unwrap();
+                let formatted_date = format_date(timestamp);
 
-                    response_data.push(TransactionResponse {
-                        tx_hash: key_parts[3].to_string(),
-                        block_number,
-                        formatted_date,
-                        data: msg_send,
-                    });
-                }
+                response_data.push(TransactionResponse {
+                    tx_hash: key_parts[3].to_string(),
+                    block_number,
+                    formatted_date,
+                    data: msg_send,
+                });
             }
         }
     }
@@ -169,9 +164,8 @@ fn get_filtered_transactions(
 }
 
 fn format_date(timestamp: i64) -> String {
-    let naive = chrono::NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap();
-    let datetime: chrono::DateTime<chrono::Utc> = chrono::DateTime::from_utc(naive, chrono::Utc);
-    let datetime_local: chrono::DateTime<chrono::Local> = datetime.into();
+    let datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
+    let datetime_local: DateTime<Local> = datetime.into();
     datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
@@ -231,20 +225,14 @@ pub async fn get_all_msg_ibc_transfer_transactions(db: web::Data<Arc<DB>>) -> im
                     let timestamp = key_parts[2].parse::<i64>().unwrap();
 
                     // Convert timestamp to Option<NaiveDateTime>
-                    let naive_opt = NaiveDateTime::from_timestamp_opt(timestamp, 0);
+                    let naive_opt = DateTime::from_timestamp(timestamp, 0);
 
-                    let mut _datetime_utc: Option<DateTime<Utc>> = None;
-
-                    if let Some(naive_datetime) = naive_opt {
-                        // Convert Option<NaiveDateTime> to DateTime
-                        _datetime_utc = Some(DateTime::<Utc>::from_utc(naive_datetime, Utc));
-                    } else {
+                    if naive_opt.is_none() {
                         error!("Invalid timestamp: {}", timestamp);
                         continue; // skip this iteration if timestamp is invalid
                     }
 
-                    let datetime_utc = _datetime_utc.unwrap(); // we can safely unwrap because of the `continue` above
-
+                    let datetime_utc = naive_opt.unwrap(); // we can safely unwrap because of the `continue` above
                     let datetime_local: DateTime<Local> = datetime_utc.into();
 
                     // Extract month, day, and year

@@ -1,0 +1,34 @@
+[package]
+name = "cosmos-indexer"
+version = "0.1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-cors = "0.7"
+actix-rt = "2.10"
+actix-web = {version = "4.9", features = ["rustls"]}
+chrono = "0.4"
+clap = { version = "3.2", features = ["derive"] }
+cosmos-sdk-proto-althea = "0.17"
+deep_space = "2.25"
+env_logger = "0.11"
+futures = "0.3"
+hex = "0.4"
+json = "0.12"
+lazy_static = "1.4"
+log = "0.4"
+num256 = "0.5"
+openssl-probe = "0.1"
+prost-types = "0.12"
+rocksdb = "0.22"
+rust_decimal= "1.36"
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1"
+serde_json = "1.0"
+sha256 = "1"
+tokio = {version="1", features=["rt-multi-thread"]}
+
+[features]
+development = []
